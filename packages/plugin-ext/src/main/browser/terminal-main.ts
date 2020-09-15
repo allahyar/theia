@@ -22,6 +22,7 @@ import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-servi
 import { TerminalServiceMain, TerminalServiceExt, MAIN_RPC_CONTEXT } from '../../common/plugin-api-rpc';
 import { RPCProtocol } from '../../common/rpc-protocol';
 import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
+import { EnvVariablesServer, SerializableEnvironmentVariableCollection } from '@theia/core/lib/common/env-variables';
 
 /**
  * Plugin api service allows working with terminal emulator.
@@ -31,12 +32,14 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, Disposable 
     private readonly terminals: TerminalService;
     private readonly shell: ApplicationShell;
     private readonly extProxy: TerminalServiceExt;
+    private readonly envVariablesServer: EnvVariablesServer;
 
     private readonly toDispose = new DisposableCollection();
 
     constructor(rpc: RPCProtocol, container: interfaces.Container) {
         this.terminals = container.get(TerminalService);
         this.shell = container.get(ApplicationShell);
+        this.envVariablesServer = container.get(EnvVariablesServer);
         this.extProxy = rpc.getProxy(MAIN_RPC_CONTEXT.TERMINAL_EXT);
         this.toDispose.push(this.terminals.onDidCreateTerminal(terminal => this.trackTerminal(terminal)));
         for (const terminal of this.terminals.all) {
@@ -44,6 +47,14 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, Disposable 
         }
         this.toDispose.push(this.terminals.onDidChangeCurrentTerminal(() => this.updateCurrentTerminal()));
         this.updateCurrentTerminal();
+    }
+
+    $setEnvironmentVariableCollection(extensionIdentifier: string, persistent: boolean, collection: SerializableEnvironmentVariableCollection | undefined): void {
+        if (collection) {
+            this.envVariablesServer.set(extensionIdentifier, persistent, collection);
+        } else {
+            this.envVariablesServer.delete(extensionIdentifier);
+        }
     }
 
     dispose(): void {

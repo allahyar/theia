@@ -17,9 +17,11 @@ import { UUID } from '@phosphor/coreutils/lib/uuid';
 import { Terminal, TerminalOptions, PseudoTerminalOptions } from '@theia/plugin';
 import { TerminalServiceExt, TerminalServiceMain, PLUGIN_RPC_CONTEXT } from '../common/plugin-api-rpc';
 import { RPCProtocol } from '../common/rpc-protocol';
-import { Emitter } from '@theia/core/lib/common/event';
+import { Event, Emitter } from '@theia/core/lib/common/event';
 import { Deferred } from '@theia/core/lib/common/promise-util';
 import * as theia from '@theia/plugin';
+import { EnvironmentVariableMutatorType } from './types-impl';
+import { SerializableEnvironmentVariableCollection } from '@theia/core/lib/common/env-variables';
 
 /**
  * Provides high level terminal plugin api to use in the Theia plugins.
@@ -41,6 +43,8 @@ export class TerminalServiceExtImpl implements TerminalServiceExt {
 
     private readonly onDidChangeActiveTerminalEmitter = new Emitter<Terminal | undefined>();
     readonly onDidChangeActiveTerminal: theia.Event<Terminal | undefined> = this.onDidChangeActiveTerminalEmitter.event;
+
+    protected environmentVariableCollections: Map<string, EnvironmentVariableCollection> = new Map();
 
     constructor(rpc: RPCProtocol) {
         this.proxy = rpc.getProxy(PLUGIN_RPC_CONTEXT.TERMINAL_MAIN);
@@ -151,6 +155,94 @@ export class TerminalServiceExtImpl implements TerminalServiceExt {
         this.onDidChangeActiveTerminalEmitter.fire(this.activeTerminal);
     }
 
+    getEnvironmentVariableCollection(extensionIdentifier: string): theia.EnvironmentVariableCollection {
+        let collection = this.environmentVariableCollections.get(extensionIdentifier);
+        if (!collection) {
+            collection = new EnvironmentVariableCollection();
+            this.setEnvironmentVariableCollection(extensionIdentifier, collection);
+        }
+        return collection;
+    }
+
+    private syncEnvironmentVariableCollection(extensionIdentifier: string, collection: EnvironmentVariableCollection): void {
+        const serialized = [...collection.map.entries()];
+        this.proxy.$setEnvironmentVariableCollection(extensionIdentifier, collection.persistent, serialized.length === 0 ? undefined : serialized);
+    }
+
+    private setEnvironmentVariableCollection(extensionIdentifier: string, collection: EnvironmentVariableCollection): void {
+        this.environmentVariableCollections.set(extensionIdentifier, collection);
+        collection.onDidChangeCollection(() => {
+            // When any collection value changes send this immediately, this is done to ensure
+            // following calls to createTerminal will be created with the new environment. It will
+            // result in more noise by sending multiple updates when called but collections are
+            // expected to be small.
+            this.syncEnvironmentVariableCollection(extensionIdentifier, collection);
+        });
+    }
+
+}
+
+export class EnvironmentVariableCollection implements theia.EnvironmentVariableCollection {
+    readonly map: Map<string, theia.EnvironmentVariableMutator> = new Map();
+    private _persistent: boolean = true;
+
+    public get persistent(): boolean { return this._persistent; }
+    public set persistent(value: boolean) {
+        this._persistent = value;
+        this._onDidChangeCollection.fire();
+    }
+
+    protected readonly _onDidChangeCollection: Emitter<void> = new Emitter<void>();
+    get onDidChangeCollection(): Event<void> { return this._onDidChangeCollection && this._onDidChangeCollection.event; }
+
+    constructor(
+        serialized?: SerializableEnvironmentVariableCollection
+    ) {
+        this.map = new Map(serialized);
+    }
+
+    get size(): number {
+        return this.map.size;
+    }
+
+    replace(variable: string, value: string): void {
+        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Replace });
+    }
+
+    append(variable: string, value: string): void {
+        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Append });
+    }
+
+    prepend(variable: string, value: string): void {
+        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Prepend });
+    }
+
+    private _setIfDiffers(variable: string, mutator: theia.EnvironmentVariableMutator): void {
+        const current = this.map.get(variable);
+        if (!current || current.value !== mutator.value || current.type !== mutator.type) {
+            this.map.set(variable, mutator);
+            this._onDidChangeCollection.fire();
+        }
+    }
+
+    get(variable: string): theia.EnvironmentVariableMutator | undefined {
+        return this.map.get(variable);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    forEach(callback: (variable: string, mutator: theia.EnvironmentVariableMutator, collection: theia.EnvironmentVariableCollection) => any, thisArg?: any): void {
+        this.map.forEach((value, key) => callback.call(thisArg, key, value, this));
+    }
+
+    delete(variable: string): void {
+        this.map.delete(variable);
+        this._onDidChangeCollection.fire();
+    }
+
+    clear(): void {
+        this.map.clear();
+        this._onDidChangeCollection.fire();
+    }
 }
 
 export class TerminalExtImpl implements Terminal {

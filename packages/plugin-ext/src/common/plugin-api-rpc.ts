@@ -87,6 +87,7 @@ import type {
     TimelineChangeEvent,
     TimelineProviderDescriptor
 } from '@theia/timeline/lib/common/timeline-model';
+import { SerializableEnvironmentVariableCollection } from '@theia/core/lib/common/env-variables';
 
 export interface PreferenceData {
     [scope: number]: any;
@@ -245,6 +246,7 @@ export interface TerminalServiceExt {
     $terminalOnInput(id: string, data: string): void;
     $terminalSizeChanged(id: string, cols: number, rows: number): void;
     $currentTerminalChanged(id: string | undefined): void;
+    getEnvironmentVariableCollection(extensionIdentifier: string): theia.EnvironmentVariableCollection;
 }
 export interface OutputChannelRegistryExt {
     createOutputChannel(name: string, pluginInfo: PluginInfo): theia.OutputChannel
@@ -312,6 +314,8 @@ export interface TerminalServiceMain {
      * @param id - terminal id.
      */
     $dispose(id: string): void;
+
+    $setEnvironmentVariableCollection(extensionIdentifier: string, persistent: boolean, collection: SerializableEnvironmentVariableCollection | undefined): void;
 }
 
 export interface AutoFocus {

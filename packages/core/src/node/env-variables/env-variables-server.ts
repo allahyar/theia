@@ -18,7 +18,16 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { injectable } from 'inversify';
 import * as drivelist from 'drivelist';
-import { EnvVariable, EnvVariablesServer } from '../../common/env-variables';
+import {
+    EnvVariable,
+    EnvVariablesServer,
+    EnvironmentVariableCollectionWithPersistence,
+    ExtensionOwnedEnvironmentVariableMutator,
+    EnvironmentVariableCollection,
+    EnvironmentVariableMutatorType,
+    MergedEnvironmentVariableCollection,
+    SerializableEnvironmentVariableCollection, EnvironmentVariableMutator
+} from '../../common/env-variables';
 import { isWindows } from '../../common/os';
 import { FileUri } from '../file-uri';
 
@@ -28,6 +37,9 @@ export class EnvVariablesServerImpl implements EnvVariablesServer {
     protected readonly envs: { [key: string]: EnvVariable } = {};
     protected readonly homeDirUri = FileUri.create(homedir()).toString();
     protected readonly configDirUri: Promise<string>;
+
+    readonly collections: Map<string, EnvironmentVariableCollectionWithPersistence> = new Map();
+    mergedCollection: MergedEnvironmentVariableCollection;
 
     constructor() {
         this.configDirUri = this.createConfigDirUri();
@@ -40,6 +52,7 @@ export class EnvVariablesServerImpl implements EnvVariablesServer {
             }
             this.envs[keyName] = { 'name': keyName, 'value': prEnv[key] };
         });
+        this.mergedCollection = this.resolveMergedCollection();
     }
 
     protected async createConfigDirUri(): Promise<string> {
@@ -97,4 +110,83 @@ export class EnvVariablesServerImpl implements EnvVariablesServer {
         return true;
     }
 
+    set(extensionIdentifier: string, persistent: boolean, collection: SerializableEnvironmentVariableCollection): void {
+        const translatedCollection = { persistent, map: new Map<string, EnvironmentVariableMutator>(collection) };
+        this.collections.set(extensionIdentifier, translatedCollection);
+        this.updateCollections();
+    }
+
+    delete(extensionIdentifier: string): void {
+        this.collections.delete(extensionIdentifier);
+        this.updateCollections();
+    }
+
+    private updateCollections(): void {
+        this.mergedCollection = this.resolveMergedCollection();
+    }
+
+    private resolveMergedCollection(): MergedEnvironmentVariableCollection {
+        return new MergedEnvironmentVariableCollectionImpl(this.collections);
+    }
 }
+
+export class MergedEnvironmentVariableCollectionImpl implements MergedEnvironmentVariableCollection {
+    readonly map: Map<string, ExtensionOwnedEnvironmentVariableMutator[]> = new Map();
+
+    constructor(collections: Map<string, EnvironmentVariableCollection>) {
+        collections.forEach((collection, extensionIdentifier) => {
+            const it = collection.map.entries();
+            let next = it.next();
+            while (!next.done) {
+                const variable = next.value[0];
+                let entry = this.map.get(variable);
+                if (!entry) {
+                    entry = [];
+                    this.map.set(variable, entry);
+                }
+
+                // If the first item in the entry is replace ignore any other entries as they would
+                // just get replaced by this one.
+                if (entry.length > 0 && entry[0].type === EnvironmentVariableMutatorType.Replace) {
+                    next = it.next();
+                    continue;
+                }
+
+                // Mutators get applied in the reverse order than they are created
+                const mutator = next.value[1];
+                entry.unshift({
+                    extensionIdentifier,
+                    value: mutator.value,
+                    type: mutator.type
+                });
+
+                next = it.next();
+            }
+        });
+    }
+
+    applyToProcessEnvironment(env: { [key: string]: string | null }): void {
+        let lowerToActualVariableNames: { [lowerKey: string]: string | undefined } | undefined;
+        if (isWindows) {
+            lowerToActualVariableNames = {};
+            Object.keys(env).forEach(e => lowerToActualVariableNames![e.toLowerCase()] = e);
+        }
+        this.map.forEach((mutators, variable) => {
+            const actualVariable = isWindows ? lowerToActualVariableNames![variable.toLowerCase()] || variable : variable;
+            mutators.forEach(mutator => {
+                switch (mutator.type) {
+                    case EnvironmentVariableMutatorType.Append:
+                        env[actualVariable] = (env[actualVariable] || '') + mutator.value;
+                        break;
+                    case EnvironmentVariableMutatorType.Prepend:
+                        env[actualVariable] = mutator.value + (env[actualVariable] || '');
+                        break;
+                    case EnvironmentVariableMutatorType.Replace:
+                        env[actualVariable] = mutator.value;
+                        break;
+                }
+            });
+        });
+    }
+}
+

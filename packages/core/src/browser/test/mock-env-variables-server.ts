@@ -15,11 +15,28 @@
  ********************************************************************************/
 
 import URI from '../../common/uri';
-import { EnvVariablesServer, EnvVariable } from '../../common/env-variables';
+import {
+    EnvVariablesServer,
+    EnvVariable,
+    EnvironmentVariableCollection,
+    MergedEnvironmentVariableCollection,
+    SerializableEnvironmentVariableCollection
+} from '../../common/env-variables';
 
 export class MockEnvVariablesServerImpl implements EnvVariablesServer {
 
+    readonly collections: Map<string, EnvironmentVariableCollection>;
+    readonly mergedCollection: MergedEnvironmentVariableCollection;
+
     constructor(protected readonly configDirUri: URI) { }
+
+    delete(extensionIdentifier: string): void {
+        throw new Error('Method not implemented.');
+    }
+
+    set(extensionIdentifier: string, persistent: boolean, collection: SerializableEnvironmentVariableCollection): void {
+        throw new Error('Method not implemented.');
+    }
 
     getHomeDirUri(): Promise<string> {
         return Promise.resolve('');

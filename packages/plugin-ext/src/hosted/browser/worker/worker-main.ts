@@ -17,7 +17,7 @@
 import { Emitter } from '@theia/core/lib/common/event';
 import { RPCProtocolImpl } from '../../../common/rpc-protocol';
 import { PluginManagerExtImpl } from '../../../plugin/plugin-manager';
-import { MAIN_RPC_CONTEXT, Plugin, emptyPlugin } from '../../../common/plugin-api-rpc';
+import { MAIN_RPC_CONTEXT, Plugin, emptyPlugin, TerminalServiceExt } from '../../../common/plugin-api-rpc';
 import { createAPIFactory } from '../../../plugin/plugin-context';
 import { getPluginId, PluginMetadata, PluginPackage } from '../../../common/plugin-protocol';
 import * as theia from '@theia/plugin';
@@ -31,6 +31,7 @@ import { WorkerEnvExtImpl } from './worker-env-ext';
 import { ClipboardExt } from '../../../plugin/clipboard-ext';
 import { KeyValueStorageProxy } from '../../../plugin/plugin-storage';
 import { WebviewsExtImpl } from '../../../plugin/webviews';
+import { TerminalServiceExtImpl } from '../../../plugin/terminal-ext';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ctx = self as any;
@@ -61,6 +62,7 @@ const preferenceRegistryExt = new PreferenceRegistryExtImpl(rpc, workspaceExt);
 const debugExt = createDebugExtStub(rpc);
 const clipboardExt = new ClipboardExt(rpc);
 const webviewExt = new WebviewsExtImpl(rpc, workspaceExt);
+const terminalService: TerminalServiceExt = new TerminalServiceExtImpl(rpc);
 
 const pluginManager = new PluginManagerExtImpl({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,7 +137,7 @@ const pluginManager = new PluginManagerExtImpl({
             }
         }
     }
-}, envExt, storageProxy, preferenceRegistryExt, webviewExt, rpc);
+}, envExt, terminalService, storageProxy, preferenceRegistryExt, webviewExt, rpc);
 
 const apiFactory = createAPIFactory(
     rpc,
@@ -172,6 +174,7 @@ ctx['theia'] = new Proxy(Object.create(null), handler);
 rpc.set(MAIN_RPC_CONTEXT.HOSTED_PLUGIN_MANAGER_EXT, pluginManager);
 rpc.set(MAIN_RPC_CONTEXT.EDITORS_AND_DOCUMENTS_EXT, editorsAndDocuments);
 rpc.set(MAIN_RPC_CONTEXT.WORKSPACE_EXT, workspaceExt);
+// rpc.set(MAIN_RPC_CONTEXT.TERMINAL_EXT, terminalService);
 rpc.set(MAIN_RPC_CONTEXT.PREFERENCE_REGISTRY_EXT, preferenceRegistryExt);
 rpc.set(MAIN_RPC_CONTEXT.WEBVIEWS_EXT, webviewExt);
 

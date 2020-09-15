@@ -22,12 +22,14 @@ import { ShellProcessFactory } from '../node/shell-process';
 import { ProcessManager } from '@theia/process/lib/node';
 import { isWindows } from '@theia/core/lib/common/os';
 import * as cp from 'child_process';
+import { EnvVariablesServer } from '@theia/core/lib/common/env-variables';
 
 @injectable()
 export class ShellTerminalServer extends BaseTerminalServer {
 
     constructor(
         @inject(ShellProcessFactory) protected readonly shellFactory: ShellProcessFactory,
+        @inject(EnvVariablesServer) protected readonly envVariablesServer: EnvVariablesServer,
         @inject(ProcessManager) processManager: ProcessManager,
         @inject(ILogger) @named('terminal') logger: ILogger) {
         super(processManager, logger);
@@ -35,6 +37,8 @@ export class ShellTerminalServer extends BaseTerminalServer {
 
     create(options: IShellTerminalServerOptions): Promise<number> {
         try {
+            options.env = options.env ? options.env : {};
+            this.envVariablesServer.mergedCollection.applyToProcessEnvironment(options.env);
             const term = this.shellFactory(options);
             this.postCreate(term);
             return Promise.resolve(term.id);
