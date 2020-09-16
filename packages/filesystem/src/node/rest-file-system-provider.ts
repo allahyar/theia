@@ -22,9 +22,9 @@
 /* eslint-disable no-null/no-null */
 /* eslint-disable no-shadow */
 
-import { injectable, inject, postConstruct } from 'inversify';
-import { basename, dirname, normalize, join } from 'path';
-import { v4 } from 'uuid';
+import {injectable, inject, postConstruct} from 'inversify';
+import {basename, dirname, normalize, join} from 'path';
+import {v4} from 'uuid';
 import * as os from 'os';
 import * as fs from 'fs';
 import {
@@ -32,16 +32,18 @@ import {
     lstat, stat, readdir, readFile, exists, chmod,
     rmdir, unlink, rename, futimes, truncate
 } from 'fs';
-import { promisify } from 'util';
+import {promisify} from 'util';
 import URI from '@theia/core/lib/common/uri';
-import { Path } from '@theia/core/lib/common/path';
-import { FileUri } from '@theia/core/lib/node/file-uri';
-import { Event, Emitter } from '@theia/core/lib/common/event';
-import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
-import { OS, isWindows } from '@theia/core/lib/common/os';
-import { retry } from '@theia/core/lib/common/promise-util';
+import {Path} from '@theia/core/lib/common/path';
+import {FileUri} from '@theia/core/lib/node/file-uri';
+import {Event, Emitter} from '@theia/core/lib/common/event';
+import {Disposable, DisposableCollection} from '@theia/core/lib/common/disposable';
+import {OS, isWindows} from '@theia/core/lib/common/os';
+import {retry} from '@theia/core/lib/common/promise-util';
 import {
-    FileSystemProviderWithFileReadWriteCapability, FileSystemProviderWithOpenReadWriteCloseCapability, FileSystemProviderWithFileFolderCopyCapability,
+    FileSystemProviderWithFileReadWriteCapability,
+    FileSystemProviderWithOpenReadWriteCloseCapability,
+    FileSystemProviderWithFileFolderCopyCapability,
     FileSystemProviderCapabilities,
     Stat,
     FileType,
@@ -54,17 +56,20 @@ import {
     FileSystemProviderError,
     FileChange,
     WatchOptions,
-    FileUpdateOptions, FileUpdateResult, FileReadStreamOptions
+    FileUpdateOptions,
+    FileUpdateResult,
+    FileReadStreamOptions
 } from '../common/files';
-import { FileSystemWatcherServer } from '../common/filesystem-watcher-protocol';
+import {FileSystemWatcherServer} from '../common/filesystem-watcher-protocol';
 import trash = require('trash');
-import { TextDocumentContentChangeEvent } from 'vscode-languageserver-protocol';
-import { TextDocument } from 'vscode-languageserver-textdocument';
-import { EncodingService } from '@theia/core/lib/common/encoding-service';
-import { BinaryBuffer } from '@theia/core/lib/common/buffer';
-import { ReadableStreamEvents, newWriteableStream } from '@theia/core/lib/common/stream';
-import { CancellationToken } from '@theia/core/lib/common/cancellation';
-import { readFileIntoStream } from '../common/io';
+import {TextDocumentContentChangeEvent} from 'vscode-languageserver-protocol';
+import {TextDocument} from 'vscode-languageserver-textdocument';
+import {EncodingService} from '@theia/core/lib/common/encoding-service';
+import {BinaryBuffer} from '@theia/core/lib/common/buffer';
+import {ReadableStreamEvents, newWriteableStream} from '@theia/core/lib/common/stream';
+import {CancellationToken} from '@theia/core/lib/common/cancellation';
+import {readFileIntoStream} from '../common/io';
+import axios, {AxiosInstance} from 'axios';
 
 export namespace RestFileSystemProvider {
     export interface StatAndLink {
@@ -92,6 +97,8 @@ export class RestFileSystemProvider implements Disposable,
 
     private readonly BUFFER_SIZE = 64 * 1024;
 
+    protected axios: AxiosInstance;
+
     private readonly onDidChangeFileEmitter = new Emitter<readonly FileChange[]>();
     readonly onDidChangeFile = this.onDidChangeFileEmitter.event;
 
@@ -112,7 +119,7 @@ export class RestFileSystemProvider implements Disposable,
     protected init(): void {
         this.toDispose.push(this.watcher);
         this.watcher.setClient({
-            onDidFilesChanged: params => this.onDidChangeFileEmitter.fire(params.changes.map(({ uri, type }) => ({
+            onDidFilesChanged: params => this.onDidChangeFileEmitter.fire(params.changes.map(({uri, type}) => ({
                 resource: new URI(uri),
                 type
             }))),
@@ -123,6 +130,15 @@ export class RestFileSystemProvider implements Disposable,
     // #region File Capabilities
 
     readonly onDidChangeCapabilities = Event.None;
+
+    constructor() {
+        // create a new instance of #axios with a custom config
+        this.axios = axios.create({
+            baseURL: 'https://quantip.idocker.ir/api/v1/',
+            timeout: 1000,
+            headers: {'X-Custom-Header': 'foobar'} // we want a token
+        });
+    }
 
     protected _capabilities: FileSystemProviderCapabilities | undefined;
     get capabilities(): FileSystemProviderCapabilities {
@@ -150,7 +166,7 @@ export class RestFileSystemProvider implements Disposable,
 
     async stat(resource: URI): Promise<Stat> {
         try {
-            const { stat, symbolicLink } = await this.statLink(this.toFilePath(resource)); // cannot use fs.stat() here to support links properly
+            const {stat, symbolicLink} = await this.statLink(this.toFilePath(resource)); // cannot use fs.stat() here to support links properly
 
             return {
                 type: this.toType(stat, symbolicLink),
@@ -184,7 +200,7 @@ export class RestFileSystemProvider implements Disposable,
 
             // Return early if the stat is not a symbolic link at all
             if (!lstats.isSymbolicLink()) {
-                return { stat: lstats };
+                return {stat: lstats};
             }
         } catch (error) {
             /* ignore - use stat() instead */
@@ -195,13 +211,13 @@ export class RestFileSystemProvider implements Disposable,
         try {
             const stats = await promisify(stat)(path);
 
-            return { stat: stats, symbolicLink: lstats?.isSymbolicLink() ? { dangling: false } : undefined };
+            return {stat: stats, symbolicLink: lstats?.isSymbolicLink() ? {dangling: false} : undefined};
         } catch (error) {
 
             // If the link points to a non-existing file we still want
             // to return it as result while setting dangling: true flag
             if (error.code === 'ENOENT' && lstats) {
-                return { stat: lstats, symbolicLink: { dangling: true } };
+                return {stat: lstats, symbolicLink: {dangling: true}};
             }
 
             throw error;
@@ -296,7 +312,7 @@ export class RestFileSystemProvider implements Disposable,
             }
 
             // Open
-            handle = await this.open(resource, { create: true });
+            handle = await this.open(resource, {create: true});
 
             // Write content at once
             await this.write(handle, 0, content, 0, content.byteLength);
@@ -689,7 +705,7 @@ export class RestFileSystemProvider implements Disposable,
             }
 
             // Delete target
-            await this.delete(to, { recursive: true, useTrash: false });
+            await this.delete(to, {recursive: true, useTrash: false});
         }
     }
 
@@ -770,7 +786,7 @@ export class RestFileSystemProvider implements Disposable,
     protected doCopyFile(source: string, target: string, mode: number): Promise<void> {
         return new Promise((resolve, reject) => {
             const reader = fs.createReadStream(source);
-            const writer = fs.createWriteStream(target, { mode });
+            const writer = fs.createWriteStream(target, {mode});
 
             let finished = false;
             const finish = (error?: Error) => {
@@ -804,7 +820,8 @@ export class RestFileSystemProvider implements Disposable,
     // #region File Watching
 
     watch(resource: URI, opts: WatchOptions): Disposable {
-        const toUnwatch = new DisposableCollection(Disposable.create(() => { /* mark as not disposed */ }));
+        const toUnwatch = new DisposableCollection(Disposable.create(() => { /* mark as not disposed */
+        }));
         this.watcher.watchFileChanges(resource.toString(), {
             ignored: opts.excludes
         }).then(watcher => {
@@ -828,7 +845,7 @@ export class RestFileSystemProvider implements Disposable,
             const encoding = await this.encodingService.toResourceEncoding(opts.writeEncoding, {
                 overwriteEncoding: opts.overwriteEncoding,
                 read: async length => {
-                    const fd = await this.open(resource, { create: false });
+                    const fd = await this.open(resource, {create: false});
                     try {
                         const data = new Uint8Array(length);
                         await this.read(fd, 0, data, 0, length);
@@ -839,9 +856,9 @@ export class RestFileSystemProvider implements Disposable,
                 }
             });
             const encoded = this.encodingService.encode(newContent, encoding);
-            await this.writeFile(resource, encoded.buffer, { create: false, overwrite: true });
+            await this.writeFile(resource, encoded.buffer, {create: false, overwrite: true});
             const stat = await this.stat(resource);
-            return Object.assign(stat, { encoding: encoding.encoding });
+            return Object.assign(stat, {encoding: encoding.encoding});
         } catch (error) {
             throw this.toFileSystemProviderError(error);
         }
