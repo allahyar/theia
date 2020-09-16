@@ -29,7 +29,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import {
     mkdir, open, close, read, write, fdatasync, Stats,
-    lstat, stat, readdir, readFile, exists, chmod,
+    lstat, stat, readdir, exists, chmod,
     rmdir, unlink, rename, futimes, truncate
 } from 'fs';
 import {promisify} from 'util';
@@ -279,7 +279,7 @@ export class RestFileSystemProvider implements Disposable,
         return await this.axios.get(`project/${this.PROJECT_ID}/file/${fileName}`)
             .then(r => {
                 console.log('done read');
-                return  r.data.result;
+                return r.data.result;
             })
             .catch(error => {
                 throw this.toFileSystemProviderError(error);
@@ -302,7 +302,8 @@ export class RestFileSystemProvider implements Disposable,
         const baseDir = URI.getDirectoryPath(resource.allLocations);
         const fileName = baseDir ? [baseDir, resource.path.base].join('/') : resource.path.base;
 
-        return await this.axios.get(`project/${this.PROJECT_ID}/file/${fileName}`)
+        return await this.axios.post(`project/${this.PROJECT_ID}/file`,
+            {fileName, content: 'test'})
             .then(r => {
                 console.log('done write');
                 return r.data.result;
@@ -498,9 +499,11 @@ export class RestFileSystemProvider implements Disposable,
     async delete(resource: URI, opts: FileDeleteOptions): Promise<void> {
 
         const PATH_NAME = resource.path.name;
-        await axios.delete(`/project/${this.PROJECT_ID}/directory/${PATH_NAME}`)
+        await axios.delete(`project/${this.PROJECT_ID}/directory/${PATH_NAME}`)
             .then(res => console.log('done delete'))
-            .catch(error => { throw new Error('Unable to delete directory'); });
+            .catch(error => {
+                throw new Error('Unable to delete directory');
+            });
 
     }
 
