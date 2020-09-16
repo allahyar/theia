@@ -41,7 +41,8 @@
     "typedoc": "^0.17.7",
     "typedoc-plugin-external-module-map": "^1.2.1",
     "typescript": "^3.9.2",
-    "uuid": "^8.0.0"
+    "uuid": "^8.0.0",
+    "axios": "^0.20.0"
   },
   "scripts": {
     "preinstall": "node-gyp install",
