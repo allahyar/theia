@@ -22,7 +22,8 @@ import { NsfwFileSystemWatcherServer } from './nsfw-watcher/nsfw-filesystem-watc
 import { MessagingService } from '@theia/core/lib/node/messaging/messaging-service';
 import { NodeFileUploadService } from './node-file-upload-service';
 import { NsfwOptions } from './nsfw-watcher/nsfw-options';
-import { DiskFileSystemProvider } from './disk-file-system-provider';
+// import { DiskFileSystemProvider } from './disk-file-system-provider';
+import { RestFileSystemProvider } from './rest-file-system-provider';
 import {
     remoteFileSystemPath, RemoteFileSystemServer, RemoteFileSystemClient, FileSystemProviderServer, RemoteFileSystemProxyFactory
 } from '../common/remote-file-system-provider';
@@ -53,8 +54,8 @@ export function bindFileSystemWatcherServer(bind: interfaces.Bind, { singleThrea
 export default new ContainerModule(bind => {
     bind(EncodingService).toSelf().inSingletonScope();
     bindFileSystemWatcherServer(bind);
-    bind(DiskFileSystemProvider).toSelf();
-    bind(FileSystemProvider).toService(DiskFileSystemProvider);
+    bind(RestFileSystemProvider).toSelf();
+    bind(FileSystemProvider).toService(RestFileSystemProvider);
     bind(FileSystemProviderServer).toSelf();
     bind(RemoteFileSystemServer).toService(FileSystemProviderServer);
     bind(ConnectionHandler).toDynamicValue(ctx =>
