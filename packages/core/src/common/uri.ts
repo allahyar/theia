@@ -14,8 +14,8 @@
  * SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
  ********************************************************************************/
 
-import { URI as Uri } from 'vscode-uri';
-import { Path } from './path';
+import {URI as Uri} from 'vscode-uri';
+import {Path} from './path';
 
 export default class URI {
 
@@ -220,6 +220,16 @@ export default class URI {
             }
         });
         return result;
+    }
+
+    static getDirectoryPath(uris: URI[]): string {
+        const source = uris.splice(1, uris.length);
+        const d = new Set();
+        source.some((uri: URI, i) => {
+                d.add(uri.path.name);
+            return uri.path.name === 'theai-easy';
+        });
+        return [...d].reverse().slice(1, [...d].length).join('/');
     }
 
 }
