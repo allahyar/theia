@@ -97,6 +97,7 @@ export class RestFileSystemProvider implements Disposable,
 
     private readonly BUFFER_SIZE = 64 * 1024;
 
+    private readonly PROJECT_ID = 1;
     protected axios: AxiosInstance;
 
     private readonly onDidChangeFileEmitter = new Emitter<readonly FileChange[]>();
@@ -293,36 +294,18 @@ export class RestFileSystemProvider implements Disposable,
     }
 
     async writeFile(resource: URI, content: Uint8Array, opts: FileWriteOptions): Promise<void> {
-        let handle: number | undefined = undefined;
-        try {
-            const filePath = this.toFilePath(resource);
 
-            // Validate target unless { create: true, overwrite: true }
-            if (!opts.create || !opts.overwrite) {
-                const fileExists = await promisify(exists)(filePath);
-                if (fileExists) {
-                    if (!opts.overwrite) {
-                        throw createFileSystemProviderError('File already exists', FileSystemProviderErrorCode.FileExists);
-                    }
-                } else {
-                    if (!opts.create) {
-                        throw createFileSystemProviderError('File does not exist', FileSystemProviderErrorCode.FileNotFound);
-                    }
-                }
-            }
+        const baseDir = URI.getDirectoryPath(resource.allLocations);
+        const fileName = baseDir ? [baseDir, resource.path.base].join('/') : resource.path.base;
 
-            // Open
-            handle = await this.open(resource, {create: true});
-
-            // Write content at once
-            await this.write(handle, 0, content, 0, content.byteLength);
-        } catch (error) {
-            throw this.toFileSystemProviderError(error);
-        } finally {
-            if (typeof handle === 'number') {
-                await this.close(handle);
-            }
-        }
+        return await this.axios.get(`project/${this.PROJECT_ID}/file/${fileName}`)
+            .then(r => {
+                console.log('done write');
+                return r.data.result;
+            })
+            .catch(error => {
+                throw this.toFileSystemProviderError(error);
+            });
     }
 
     private mapHandleToPos: Map<number, number> = new Map();
