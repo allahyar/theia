@@ -273,13 +273,17 @@ export class RestFileSystemProvider implements Disposable,
     // #region File Reading/Writing
 
     async readFile(resource: URI): Promise<Uint8Array> {
-        try {
-            const filePath = this.toFilePath(resource);
 
-            return await promisify(readFile)(filePath);
-        } catch (error) {
-            throw this.toFileSystemProviderError(error);
-        }
+        const baseDir = URI.getDirectoryPath(resource.allLocations);
+        const fileName = baseDir ? [baseDir, resource.path.base].join('/') : resource.path.base;
+        return await this.axios.get(`project/${this.PROJECT_ID}/file/${fileName}`)
+            .then(r => {
+                console.log('done read');
+                return  r.data.result;
+            })
+            .catch(error => {
+                throw this.toFileSystemProviderError(error);
+            });
     }
 
     readFileStream(resource: URI, opts: FileReadStreamOptions, token: CancellationToken): ReadableStreamEvents<Uint8Array> {
@@ -492,13 +496,12 @@ export class RestFileSystemProvider implements Disposable,
     }
 
     async delete(resource: URI, opts: FileDeleteOptions): Promise<void> {
-        try {
-            const filePath = this.toFilePath(resource);
 
-            await this.doDelete(filePath, opts);
-        } catch (error) {
-            throw this.toFileSystemProviderError(error);
-        }
+        const PATH_NAME = resource.path.name;
+        await axios.delete(`/project/${this.PROJECT_ID}/directory/${PATH_NAME}`)
+            .then(res => console.log('done delete'))
+            .catch(error => { throw new Error('Unable to delete directory'); });
+
     }
 
     protected async doDelete(filePath: string, opts: FileDeleteOptions): Promise<void> {
@@ -569,6 +572,7 @@ export class RestFileSystemProvider implements Disposable,
     }
 
     async rename(from: URI, to: URI, opts: FileOverwriteOptions): Promise<void> {
+
         const fromFilePath = this.toFilePath(from);
         const toFilePath = this.toFilePath(to);
 
@@ -576,23 +580,16 @@ export class RestFileSystemProvider implements Disposable,
             return; // simulate node.js behaviour here and do a no-op if paths match
         }
 
-        try {
-
-            // Ensure target does not exist
-            await this.validateTargetDeleted(from, to, 'move', opts.overwrite);
-
-            // Move
-            await this.move(fromFilePath, toFilePath);
-        } catch (error) {
-
-            // rewrite some typical errors that can happen especially around symlinks
-            // to something the user can better understand
-            if (error.code === 'EINVAL' || error.code === 'EBUSY' || error.code === 'ENAMETOOLONG') {
-                error = new Error(`Unable to move '${basename(fromFilePath)}' into '${basename(dirname(toFilePath))}' (${error.toString()}).`);
-            }
-
-            throw this.toFileSystemProviderError(error);
-        }
+        await axios.post(`/project/${this.PROJECT_ID}/directory/rename`,
+            {
+                from: fromFilePath,
+                to: toFilePath
+            })
+            .then(res => console.log('done rename'))
+            .catch(error => {
+                error = new Error(`Unable to move '${basename(fromFilePath)}' into '${basename(dirname(toFilePath))}'(${error.toString()}).`);
+                throw this.toFileSystemProviderError(error);
+            });
     }
 
     protected async move(source: string, target: string): Promise<void> {
